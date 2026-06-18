@@ -1,6 +1,101 @@
 #![no_std]
-use soroban_sdk::{contractimpl, symbol, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol, symbol_short, Address, Env};
+use soroban_sdk::vec::Vec as SorobanVec;
 use soroban_sdk::token::TokenClient;
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Proposal {
+    pub id: u64,
+    pub title: String,
+    pub description: String,
+    pub votes_for: i128,
+    pub votes_against: i128,
+    pub deadline: u64,
+    pub executed: bool,
+}
+
+#[contract]
+pub struct SimpleDAO;
+
+#[contractimpl]
+impl SimpleDAO {
+    pub fn create_proposal(env: Env, title: String, description: String, voting_period: u64) -> u64 {
+        // load existing proposals vector or create new
+        let mut props: SorobanVec<Proposal> = env
+            .storage()
+            .persistent()
+            .get(&symbol_short!("PROPS"))
+            .unwrap_or_else(|| SorobanVec::new(&env));
+
+        let mut counter: u64 = env.storage().persistent().get(&symbol_short!("PROP_CT")).unwrap_or(0u64);
+        counter = counter + 1;
+        env.storage().persistent().set(&symbol_short!("PROP_CT"), &counter);
+
+        let deadline = env.ledger().timestamp() + voting_period;
+        let p = Proposal {
+            id: counter,
+            title,
+            description,
+            votes_for: 0,
+            votes_against: 0,
+            deadline,
+            executed: false,
+        };
+        props.push_back(p);
+        env.storage().persistent().set(&symbol_short!("PROPS"), &props);
+        counter
+    }
+
+    pub fn vote(env: Env, proposal_id: u64, support: bool) {
+        let invoker: Address = env.invoker();
+
+        // prevent double-vote
+        let voted_key = (symbol_short!("VOTED"), proposal_id, invoker.clone());
+        let already: Option<bool> = env.storage().persistent().get(&voted_key);
+        if already.unwrap_or(false) {
+            panic!("already voted");
+        }
+
+        let mut props: SorobanVec<Proposal> = env.storage().persistent().get(&symbol_short!("PROPS")).unwrap();
+        let len = props.len();
+        let mut i = 0u32;
+        while i < len {
+            let mut pr = props.get(i).unwrap();
+            if pr.id == proposal_id {
+                if support {
+                    pr.votes_for = pr.votes_for + 1;
+                } else {
+                    pr.votes_against = pr.votes_against + 1;
+                }
+                props.set(i, pr);
+                env.storage().persistent().set(&symbol_short!("PROPS"), &props);
+                env.storage().persistent().set(&voted_key, &true);
+                return;
+            }
+            i += 1;
+        }
+        panic!("proposal not found");
+    }
+
+    pub fn get_proposal(env: Env, proposal_id: u64) -> Option<Proposal> {
+        let props: Option<SorobanVec<Proposal>> = env.storage().persistent().get(&symbol_short!("PROPS"));
+        if props.is_none() {
+            return None;
+        }
+        let props = props.unwrap();
+        let len = props.len();
+        let mut i = 0u32;
+        while i < len {
+            let pr = props.get(i).unwrap();
+            if pr.id == proposal_id {
+                return Some(pr);
+            }
+            i += 1;
+        }
+        None
+    }
+}
 
 pub struct MilestoneEscrow;
 

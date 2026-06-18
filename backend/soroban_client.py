@@ -65,3 +65,8 @@ def invoke_contract_function(contract_id: str, fn: str, args: List[str] = None, 
     if network:
         cmd.extend(["--network", network])
     return subprocess.run(cmd, check=False, capture_output=True, text=True)
+
+
+def invoke_contract_function_with_args(contract_id: str, fn: str, args: List[str] = None, network: str = None):
+    """Alias for invoke_contract_function kept for clarity with backend endpoints."""
+    return invoke_contract_function(contract_id, fn, args=args, network=network)
