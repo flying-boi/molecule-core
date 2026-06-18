@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# Node
+node_modules/
+dist/
+build/
+
+# Hardhat / solidity
+cache/
+artifacts/
+coverage/
+
+# Soroban
+contracts/soroban/target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+
+# Misc
+*.log
