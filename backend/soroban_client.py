@@ -9,6 +9,7 @@ for integration. In production you would call RPC endpoints or use an SDK.
 
 from pathlib import Path
 import subprocess
+from typing import List
 
 CONTRACT_DIR = Path(__file__).resolve().parent.parent / "contracts" / "soroban"
 WASM_PATH = CONTRACT_DIR / "target" / "wasm32-unknown-unknown" / "release" / "milestone_escrow_soroban.wasm"
@@ -46,6 +47,21 @@ def invoke_release(contract_id: str, network: str = None):
     Returns `subprocess.CompletedProcess` with captured stdout/stderr.
     """
     cmd = ["soroban", "contract", "invoke", "--id", str(contract_id), "--fn", "release"]
+    if network:
+        cmd.extend(["--network", network])
+    return subprocess.run(cmd, check=False, capture_output=True, text=True)
+
+
+def invoke_contract_function(contract_id: str, fn: str, args: List[str] = None, network: str = None):
+    """Invoke an arbitrary function on a deployed Soroban contract using the CLI.
+
+    Args are passed as strings and forwarded with repeated `--arg` flags.
+    """
+    if args is None:
+        args = []
+    cmd = ["soroban", "contract", "invoke", "--id", str(contract_id), "--fn", fn]
+    for a in args:
+        cmd.extend(["--arg", str(a)])
     if network:
         cmd.extend(["--network", network])
     return subprocess.run(cmd, check=False, capture_output=True, text=True)

@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 
-from .soroban_client import build_contract, deploy_contract, invoke_release
+from .soroban_client import build_contract, deploy_contract, invoke_release, invoke_contract_function
 
 app = FastAPI(title="DeSci Labs Prototype API")
 
@@ -81,6 +81,45 @@ def soroban_build():
 def soroban_deploy(network: Optional[str] = None):
     res = deploy_contract(network=network)
     return {"returncode": res.returncode, "stdout": getattr(res, "stdout", ""), "stderr": getattr(res, "stderr", "")}
+
+
+class DeployInitRequest(BaseModel):
+    payer: str
+    payee: str
+    amount: int
+    token_contract: str
+    network: Optional[str] = None
+
+
+@app.post("/soroban/deploy_init")
+def soroban_deploy_and_init(req: DeployInitRequest):
+    # build
+    b = build_contract()
+    if b.returncode != 0:
+        raise HTTPException(status_code=500, detail={"stage": "build", "stderr": b.stderr})
+
+    # deploy
+    d = deploy_contract(network=req.network)
+    if d.returncode != 0:
+        raise HTTPException(status_code=500, detail={"stage": "deploy", "stdout": d.stdout, "stderr": d.stderr})
+
+    # try extract contract id from output
+    import re
+
+    out = getattr(d, "stdout", "") or ""
+    m = re.search(r"([0-9a-fA-F]{40,128})", out)
+    contract_id = m.group(1) if m else None
+    if not contract_id:
+        raise HTTPException(status_code=500, detail={"stage": "deploy", "stdout": out, "message": "contract id not found in deploy output"})
+
+    # initialize
+    args = [req.payer, req.payee, str(req.amount), req.token_contract]
+    inv = invoke_contract_function(contract_id, "initialize", args=args, network=req.network)
+    return {
+        "deploy": {"returncode": d.returncode, "stdout": getattr(d, "stdout", ""), "stderr": getattr(d, "stderr", "")},
+        "initialize": {"returncode": inv.returncode, "stdout": getattr(inv, "stdout", ""), "stderr": getattr(inv, "stderr", "")},
+        "contract_id": contract_id,
+    }
 
 
 class InvokeRequest(BaseModel):
